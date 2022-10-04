@@ -1,3 +1,3 @@
-module github.com/surjit/json
+module github.com/surjit/json1
 
 go 1.19
