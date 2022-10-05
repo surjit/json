@@ -6,3 +6,18 @@ The semantic versioning for this repository follows that of the go src version t
 
 # Changelog
 
+
+```
+type TestStruct struct {
+  Text string `json:"text" default:"emptynil"`
+}
+
+```
+
+### JSON output when empty string ""
+
+```
+{
+ "text": null
+}
+```

@@ -374,6 +374,8 @@ type encOpts struct {
 	quoted bool
 	// escapeHTML causes '<', '>', and '&' to be escaped in JSON strings.
 	escapeHTML bool
+
+	defaultValue string
 }
 
 type encoderFunc func(e *encodeState, v reflect.Value, opts encOpts)
@@ -649,11 +651,11 @@ func stringEncoder(e *encodeState, v reflect.Value, opts encOpts) {
 		e2 := newEncodeState()
 		// Since we encode the string twice, we only need to escape HTML
 		// the first time.
-		e2.string(v.String(), opts.escapeHTML)
+		e2.string(v.String(), opts)
 		e.stringBytes(e2.Bytes(), false)
 		encodeStatePool.Put(e2)
 	} else {
-		e.string(v.String(), opts.escapeHTML)
+		e.string(v.String(), opts)
 	}
 }
 
@@ -766,7 +768,10 @@ FieldLoop:
 		} else {
 			e.WriteString(f.nameNonEsc)
 		}
+
 		opts.quoted = f.quoted
+		opts.defaultValue = f.defaultVal
+
 		f.encoder(e, fv, opts)
 	}
 	if next == '{' {
@@ -818,7 +823,7 @@ func (me mapEncoder) encode(e *encodeState, v reflect.Value, opts encOpts) {
 		if i > 0 {
 			e.WriteByte(',')
 		}
-		e.string(kv.ks, opts.escapeHTML)
+		e.string(kv.ks, opts)
 		e.WriteByte(':')
 		me.elemEnc(e, kv.v, opts)
 	}
@@ -1037,7 +1042,14 @@ func (w *reflectWithString) resolve() error {
 }
 
 // NOTE: keep in sync with stringBytes below.
-func (e *encodeState) string(s string, escapeHTML bool) {
+func (e *encodeState) string(s string, opts encOpts) {
+	escapeHTML := opts.escapeHTML
+
+	if s == "" && strings.Contains(opts.defaultValue, "emptynil") {
+		e.WriteString("null")
+		return
+	}
+
 	e.WriteByte('"')
 	start := 0
 	for i := 0; i < len(s); {
@@ -1189,11 +1201,12 @@ type field struct {
 	nameNonEsc  string // `"` + name + `":`
 	nameEscHTML string // `"` + HTMLEscape(name) + `":`
 
-	tag       bool
-	index     []int
-	typ       reflect.Type
-	omitEmpty bool
-	quoted    bool
+	tag        bool
+	index      []int
+	typ        reflect.Type
+	omitEmpty  bool
+	quoted     bool
+	defaultVal string
 
 	encoder encoderFunc
 }
@@ -1273,6 +1286,9 @@ func typeFields(t reflect.Type) structFields {
 				if !isValidTag(name) {
 					name = ""
 				}
+
+				tag0 := sf.Tag.Get("default")
+
 				index := make([]int, len(f.index)+1)
 				copy(index, f.index)
 				index[len(f.index)] = i
@@ -1303,12 +1319,13 @@ func typeFields(t reflect.Type) structFields {
 						name = sf.Name
 					}
 					field := field{
-						name:      name,
-						tag:       tagged,
-						index:     index,
-						typ:       ft,
-						omitEmpty: opts.Contains("omitempty"),
-						quoted:    quoted,
+						name:       name,
+						tag:        tagged,
+						index:      index,
+						typ:        ft,
+						omitEmpty:  opts.Contains("omitempty"),
+						defaultVal: tag0,
+						quoted:     quoted,
 					}
 					field.nameBytes = []byte(field.name)
 					field.equalFold = foldFunc(field.nameBytes)
