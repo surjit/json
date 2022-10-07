@@ -741,6 +741,11 @@ type structFields struct {
 }
 
 func (se structEncoder) encode(e *encodeState, v reflect.Value, opts encOpts) {
+	if opts.defaultValue == "emptynil" && isEmptyValue(v) {
+		e.WriteString("null")
+		return
+	}
+
 	next := byte('{')
 FieldLoop:
 	for i := range se.fields.list {
